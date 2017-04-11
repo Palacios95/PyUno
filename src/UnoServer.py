@@ -1,5 +1,6 @@
 from socket import *
-from UnoDeck import *
+
+from src.UnoDeck import *
 
 
 def create_socket(port_num):

@@ -11,7 +11,7 @@ def create_socket(port_num):
     return s
 
 
-# 172.27.5.129 for local
+
 def main():
     sock = create_socket(80)
     deck = generate_deck()

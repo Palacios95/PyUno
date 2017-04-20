@@ -7,8 +7,9 @@ RECV_BUFFER = 1024
 
 def main():
     c_sock = create_socket('localhost', 2121)
-    join_game('AlexThyMan', c_sock)
-    receive_hand(c_sock)
+    player = join_game('AlexThyMan', c_sock)
+    player['hand'] = receive_hand(c_sock)
+    print(player)
 
 
 def create_socket(hostname, port_num):
@@ -20,13 +21,14 @@ def create_socket(hostname, port_num):
 
 
 def join_game(player_name, c_sock):
-    player_json = json.dumps({"player_name": player_name})
-    c_sock.send(player_json.encode())
+    player = {"player_name": player_name}
+    c_sock.send(json.dumps(player).encode())
+    return player
 
 
 def receive_hand(c_sock):
     hand = json.loads(c_sock.recv(RECV_BUFFER).decode())
-    print(hand)
+    return hand
 
 
-main()
+#main()

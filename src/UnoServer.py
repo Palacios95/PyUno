@@ -5,19 +5,6 @@ import json
 RECV_BUFFER = 1024
 
 
-def main():
-
-    players = []
-    client_sock = create_socket(2121)
-
-    accept_players(client_sock, players)
-    print(players)
-
-    deck = generate_deck()
-    distribute_cards(players, deck )
-    print(deck)
-
-
 def create_socket(port_num):
     s = socket(AF_INET, SOCK_STREAM)
     s.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
@@ -26,16 +13,19 @@ def create_socket(port_num):
     return s
 
 
-def accept_players(s_sock, players):
-    while len(players) < 1:
+def accept_players(s_sock, players, numplayers):
+
+    deck = generate_deck()
+
+    while len(players) < numplayers:
         (sock, address) = s_sock.accept()
         player = json.loads(sock.recv(RECV_BUFFER).decode())
         player['socket'] = sock
         players.append(player)
+        distribute_cards(player, deck)
 
 
-def distribute_cards(players, deck):
-    for player in players:
+def distribute_cards(player, deck):
         hand = []
         for i in range(0, 7):
             card = deck.pop()
@@ -43,4 +33,4 @@ def distribute_cards(players, deck):
         player['socket'].send(json.dumps(hand).encode())
 
 
-main()
+#main()

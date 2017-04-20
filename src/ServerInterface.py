@@ -1,5 +1,7 @@
 import tkinter as tk
-from src.UnoClient import *
+from src.UnoServer import *
+
+RECV_BUFFER = 1024
 
 
 # Main part of the app. Handles transition from the connection window to the game window and stores the player
@@ -12,8 +14,9 @@ class MainApp(tk.Tk):
         tk.Tk.__init__(self, *args, **kwargs)
 
         # Initialize socket and player vars. We need these for the game window and connection window.
-        self.client_sock = {}
-        self.player = {}
+        self.server_sock = {}
+        self.players = []
+        self.deck = {}
 
         # Main frame and config
         container = tk.Frame(self)
@@ -25,56 +28,48 @@ class MainApp(tk.Tk):
         self.frames = {}
 
         # Loop through the frame tuple (windows) and add it to the frames dictionary
-        for F in (ConnectWindow, GameWindow):
+        for F in (ServerWindow, PingWindow):
             page_name = F.__name__
             frame = F(parent=container, controller=self)
             self.frames[page_name] = frame
             frame.grid(row=0, column=0, sticky="nsew")
 
         # Showing the connection window first.
-        self.show_frame("ConnectWindow")
+        self.show_frame("ServerWindow")
 
     def show_frame(self, cont):
         frame = self.frames[cont]
         frame.tkraise()
 
 
-# This is the connection window used to establish a connection to the server.
-class ConnectWindow(tk.Frame):
-
+class ServerWindow(tk.Frame):
     def __init__(self, parent, controller):
         tk.Frame.__init__(self, parent)
 
-        # Controller references the MainApp class. We use this to access its instance variables.
         self.controller = controller
 
-        # Relevant labels, buttons, and entries.
-        name_label = tk.Label(self, text="Name")
-        self.name_entry = tk.Entry(self)
-        host_label = tk.Label(self, text="Host: ")
-        self.host_entry = tk.Entry(self)
         port_label = tk.Label(self, text="Port Number: ")
         self.port_entry = tk.Entry(self)
-        connect_button = tk.Button(self, text="Connect", command=self.connect)
-        # Adding all controls to the grid of the window.
-        name_label.grid(row=0, sticky='e')
-        self.name_entry.grid(row=0, column=1)
-        host_label.grid(row=1, sticky='e')
-        self.host_entry.grid(row=1, column=1)
-        port_label.grid(row=2, sticky='e')
-        self.port_entry.grid(row=2, column=1)
-        connect_button.grid(row=3, column=1)
 
-    # Connects to the host and translates to the game window.
-    def connect(self):
-        self.controller.client_sock = create_socket(self.host_entry.get(), int(self.port_entry.get()))
-        self.controller.player = join_game(self.name_entry.get(), self.controller.client_sock)
-        self.controller.player['hand'] = receive_hand(self.controller.client_sock)
-        print(self.controller.player)
-        self.controller.show_frame("GameWindow")
+        playerno_label = tk.Label(self, text="Number of players: ")
+        self.playerno_entry = tk.Entry(self)
+
+        port_label.grid(row=0, sticky='e')
+        self.port_entry.grid(row=0, column=1)
+
+        playerno_label.grid(row=1, sticky='e')
+        self.playerno_entry.grid(row=1, column=1)
+
+        start_button = tk.Button(self, text="Start server", command=self.start)
+        start_button.grid(row=2, column=1)
+
+    def start(self):
+        server_sock = create_socket(int(self.port_entry.get()))
+        accept_players(server_sock, self.controller.players, int(self.playerno_entry.get()))
+        print(self.controller.players)
 
 
-class GameWindow(tk.Frame):
+class PingWindow(tk.Frame):
     def __init__(self, parent, controller):
         tk.Frame.__init__(self, parent)
         self.controller = controller
@@ -82,11 +77,7 @@ class GameWindow(tk.Frame):
         label.pack(side="top", fill="x", pady=10)
 
 
-client_app = MainApp()
-client_app.mainloop()
-
-
-
-
+server_app = MainApp()
+server_app.mainloop()
 
 

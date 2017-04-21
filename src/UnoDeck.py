@@ -8,7 +8,7 @@ from random import shuffle
 # 13 is Wild cards.
 # 14 is wild draw 4 cards.
 def generate_deck():
-    card_colors = ["Red", "Green", "Yellow", "Blue"]
+    card_colors = ["red", "green", "yellow", "blue"]
     # Card types 0-12 are all the cards that have a color (Not wild cards).
     card_types = range(0, 13)
     deck = []
@@ -19,8 +19,8 @@ def generate_deck():
             if not card_type == 0:
                 deck.append({'type': card_type, 'color': color})
     for i in range(0, 4):
-        deck.append({'type': 13, 'color': 'None'})
-        deck.append({'type': 14, 'color': 'None'})
+        deck.append({'type': 13, 'color': 'black'})
+        deck.append({'type': 14, 'color': 'black'})
 
     shuffle(deck)
 

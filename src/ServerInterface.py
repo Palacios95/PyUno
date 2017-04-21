@@ -1,4 +1,5 @@
 import tkinter as tk
+import tkinter.ttk as ttk
 from src.UnoServer import *
 
 RECV_BUFFER = 1024
@@ -18,8 +19,9 @@ class MainApp(tk.Tk):
         self.players = []
         self.deck = {}
 
+        self.wm_title("PyUno Server")
         # Main frame and config
-        container = tk.Frame(self)
+        container = ttk.Frame(self)
         container.pack(side="top", fill="both", expand=True)
         container.grid_rowconfigure(0, weight=1)
         container.grid_columnconfigure(0, weight=1)
@@ -45,35 +47,41 @@ class MainApp(tk.Tk):
 class ServerWindow(tk.Frame):
     def __init__(self, parent, controller):
         tk.Frame.__init__(self, parent)
-
+        # Controller references the main app. Used to access its instance variables.
         self.controller = controller
 
-        port_label = tk.Label(self, text="Port Number: ")
-        self.port_entry = tk.Entry(self)
-
-        playerno_label = tk.Label(self, text="Number of players: ")
-        self.playerno_entry = tk.Entry(self)
-
+        # Controls relevant to the server window.
+        port_label = ttk.Label(self, text="Port Number: ")
+        self.port_entry = ttk.Entry(self)
+        playerno_label = ttk.Label(self, text="Number of players: ")
+        self.playerno_entry = ttk.Entry(self)
+        # Adding relevant controls to grid.
         port_label.grid(row=0, sticky='e')
         self.port_entry.grid(row=0, column=1)
-
         playerno_label.grid(row=1, sticky='e')
         self.playerno_entry.grid(row=1, column=1)
-
-        start_button = tk.Button(self, text="Start server", command=self.start)
+        start_button = ttk.Button(self, text="Start server", command=self.start)
         start_button.grid(row=2, column=1)
 
+        self.insert_defaults()
+
+    # Start accepting players into the game
     def start(self):
         server_sock = create_socket(int(self.port_entry.get()))
         accept_players(server_sock, self.controller.players, int(self.playerno_entry.get()))
         print(self.controller.players)
 
+    # Insert defaults to entry controls for quick testing.
+    def insert_defaults(self):
+        self.port_entry.insert('end', 2121)
+        self.playerno_entry.insert('end', 1)
+
 
 class PingWindow(tk.Frame):
     def __init__(self, parent, controller):
-        tk.Frame.__init__(self, parent)
+        ttk.Frame.__init__(self, parent)
         self.controller = controller
-        label = tk.Label(self, text="PyUno")
+        label = ttk.Label(self, text="PyUno")
         label.pack(side="top", fill="x", pady=10)
 
 

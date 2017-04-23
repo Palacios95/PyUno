@@ -10,7 +10,9 @@ from random import shuffle
 def generate_deck():
     card_colors = ["red", "green", "yellow", "blue"]
     # Card types 0-12 are all the cards that have a color (Not wild cards).
-    card_types = range(0, 13)
+    card_types = list(range(0, 10))
+    other_types = ['Draw two', 'Reverse', 'Skip']
+    card_types += other_types
     deck = []
     for color in card_colors:
         for card_type in card_types:

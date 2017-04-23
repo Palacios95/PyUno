@@ -1,7 +1,9 @@
 import tkinter as tk
 import tkinter.ttk as ttk
-from src.UnoClient import *
+from src.UnoClient import UnoClient
+from src.ChatClient import ChatClient
 from tkinter.scrolledtext import ScrolledText
+import threading
 
 
 # Main part of the app. Handles transition from the connection window to the game window and stores the player
@@ -13,9 +15,11 @@ class MainApp(tk.Tk):
     def __init__(self, *args, **kwargs):
         tk.Tk.__init__(self, *args, **kwargs)
 
-        # Initialize socket and player vars. We need these for the game window and connection window.
-        self.client_sock = {}
-        self.player = {}
+        self.uno_client = UnoClient()
+        self.chat_client = ChatClient()
+        self.hostname = ''
+        self.port_num = 0
+        self.chatport_num = 0
 
         self.wm_title("PyUno Client")
         # Main frame and config
@@ -24,7 +28,7 @@ class MainApp(tk.Tk):
         container.grid_rowconfigure(0, weight=1)
         container.grid_columnconfigure(0, weight=1)
 
-        self.geometry("220x100")
+        self.geometry("250x120")
 
         # Configure button styling
         style = ttk.Style()
@@ -65,7 +69,9 @@ class ConnectWindow(tk.Frame):
         self.host_entry = ttk.Entry(self)
         port_label = ttk.Label(self, text="Port Number: ")
         self.port_entry = ttk.Entry(self)
-        connect_button = ttk.Button(self, text="Connect", command=self.connect)
+        self.chatport_label = ttk.Label(self, text="Chat Port Number: ")
+        self.chatport_entry = ttk.Entry(self)
+        self.connect_button = ttk.Button(self, text="Connect", command=self.connect)
         # Adding all controls to the grid of the window.
         name_label.grid(row=0, sticky='e')
         self.name_entry.grid(row=0, column=1)
@@ -73,16 +79,27 @@ class ConnectWindow(tk.Frame):
         self.host_entry.grid(row=1, column=1)
         port_label.grid(row=2, sticky='e')
         self.port_entry.grid(row=2, column=1)
-        connect_button.grid(row=3, column=1)
+        self.chatport_label.grid(row=3, column=0)
+        self.chatport_entry.grid(row=3, column=1)
+        self.connect_button.grid(row=4, column=1)
 
         self.insert_defaults()
 
     # Connects to the host and translates to the game window.
     def connect(self):
-        self.controller.client_sock = create_socket(self.host_entry.get(), int(self.port_entry.get()))
-        self.controller.player = join_game(self.name_entry.get(), self.controller.client_sock)
-        self.controller.player['hand'] = receive_hand(self.controller.client_sock)
-        print(self.controller.player)
+        uno_client = self.controller.uno_client
+        chat_client = self.controller.chat_client
+        self.connect_button['text'] = 'Waiting for other players...'
+        self.update()
+        self.controller.hostname = self.host_entry.get()
+        self.controller.port_num = int(self.port_entry.get())
+        uno_client.create_socket(self.controller.hostname, self.controller.port_num)
+        uno_client.join_game(self.name_entry.get())
+        uno_client.start_game()
+        print(uno_client.player)
+
+        self.controller.chatport_num = int(self.chatport_entry.get())
+        chat_client.start_client(self.controller.hostname, self.controller.chatport_num)
 
         frame = GameWindow(parent=self.parent, controller=self.controller)
         self.controller.frames[GameWindow] = frame
@@ -90,12 +107,14 @@ class ConnectWindow(tk.Frame):
         self.controller.show_frame(GameWindow)
 
         self.controller.geometry("600x400")
+        self.update()
 
     # Insert defaults to entry controls for quick testing.
     def insert_defaults(self):
         self.name_entry.insert('end', 'testplayer')
         self.host_entry.insert('end', 'localhost')
         self.port_entry.insert('end', 2121)
+        self.chatport_entry.insert('end', 2122)
 
 
 class GameWindow(tk.Frame):
@@ -103,48 +122,152 @@ class GameWindow(tk.Frame):
         tk.Frame.__init__(self, parent)
         # Controller references the MainApp class. We use this to access its instance variables.
         self.controller = controller
+        # Array of button handles
+        self.buttons = []
+        # iterator to determine which column to place the button in within the grid
+        self.current_col = 0
 
         self.grid_rowconfigure(1)
         self.grid_columnconfigure(1, weight=1)
 
         title_label = ttk.Label(self, text="PyUno")
+        self.turn_label = ttk.Label(self, text="turn")
+        self.currentcard_label = ttk.Label(self, text='')
+        self.currentcard_frame = ttk.Frame(self)
         card_label = ttk.Label(self, text="Cards in your hand")
         chat_label = ttk.Label(self, text="Chat")
-        chat_area = ScrolledText(self)
+        self.chat_area = ScrolledText(self, height=10)
+        chat_frame = ttk.Frame(self)
+        sendchat_label = ttk.Label(chat_frame, text='Send Message:')
+        self.sendchat_entry = ttk.Entry(chat_frame, text='', width=50)
+        sendchat_button = ttk.Button(chat_frame, text='Send message', command=self.send_message)
         title_label.grid(row=0, column=1)
-        card_label.grid(row=1, column=1)
+        self.turn_label.grid(row=1, column=1)
+        self.currentcard_label.grid(row=2, column=1)
+        self.currentcard_frame.grid(row=3, column=1)
+        card_label.grid(row=4, column=1)
+        # Button array needs its own frame
+        self.button_frame = ttk.Frame(self)
+        self.button_frame.grid(row=5, column=1)
+        chat_label.grid(row=6, column=1)
+        self.chat_area.grid(row=7, column=1)
+        chat_frame.grid(row=8, column=1)
+        sendchat_label.grid(row=0, column=0)
+        self.sendchat_entry.grid(row=0, column=1)
+        sendchat_button.grid(row=0, column=2)
+
+        messagereceive_thread = threading.Thread(target=self.receive_messages)
+        messagereceive_thread.start()
+
         self.generate_cardbuttons()
-        chat_label.grid(row=3, column=1)
-        chat_area.grid(row=4, column=1)
+
+        self.init_turn()
+        self.change_cardstate()
+
+        if not self.controller.uno_client.your_turn:
+            wait_thread = threading.Thread(target=self.done_wait)
+            wait_thread.start()
 
     # Generates the initial hand as buttons.
     def generate_cardbuttons(self):
         # Accessing player's hand
-        hand = self.controller.player['hand']
-        # iterator to determine which column to place the button in within the grid
-        current_col = 0
-        # Button array needs its own frame
-        button_frame = ttk.Frame(self)
-        button_frame.grid(row=2, column=1)
-        # Array of buttons for purposes of mutation
-        buttons = []
+        hand = self.controller.uno_client.player['hand']
+
         # Iterate through cards in hand and create a new button.
         for card in hand:
             # Initialize Button control
-            card_button = ttk.Button(button_frame, text=card['type'], style="%s.TButton" % card['color'], width=5,
-                                    command=lambda button_array=buttons, button_index=current_col, current_card=card:
-                                    self.button_action(button_array, button_index, current_card))
+            card_button = ttk.Button(self.button_frame, text=card['type'], style="%s.TButton" % card['color'], width=5,
+                                    command=lambda current_card=card: self.button_action(current_card))
             # Append button control to array
-            buttons.append(card_button)
+            self.buttons.append(card_button)
             # Add button to grid dynamically
-            card_button.grid(row=0, column=current_col, sticky='ew')
+            card_button.grid(row=0, column=self.current_col, sticky='ew')
             # Increment for next button
-            current_col += 1
-
+            self.current_col += 1
 
     # Determine which action to send to the server depending on which button is clicked.
-    def button_action(self, buttons, button_index, card):
-        buttons[button_index].destroy()
+    def button_action(self, card):
+        uno_client = self.controller.uno_client
+        uno_client.send_card(card)
+
+        button = self.get_button(card)
+        button.destroy()
+        self.buttons.remove(button)
+
+        self.turn_label['text'] = 'Wait for your turn'
+        uno_client.your_turn = False
+        self.change_cardstate()
+
+        self.update()
+
+        uno_client.wait_turndata()
+
+        self.show_currentcard()
+        self.add_draw()
+        self.turn_label['text'] = 'Your turn'
+        uno_client.your_turn = True
+        self.change_cardstate()
+
+    def get_button(self, card):
+        for button in self.buttons:
+            if button['text'] == card['type'] and button['style'].startswith(card['color']):
+                return button
+
+    def show_currentcard(self):
+        self.currentcard_label['text'] = 'Current card'
+        current_card = self.controller.uno_client.current_card
+        card_button = ttk.Button(self.currentcard_frame, text=current_card['type'],
+                                 style="%s.TButton" % current_card['color'], width=5)
+        card_button.grid(row=0, column=0, sticky='ew')
+
+    def add_draw(self):
+        uno_client = self.controller.uno_client
+        cards = uno_client.cards_drawn
+        print(self.current_col)
+        for card in cards:
+            card_button = ttk.Button(self.button_frame, text=card['type'], style="%s.TButton" % card['color'], width=5,
+                                     command=lambda current_card=card: self.button_action(current_card))
+            # Append button control to array
+            self.buttons.append(card_button)
+            # Add button to grid dynamically
+            card_button.grid(row=0, column=self.current_col, sticky='ew')
+            # Increment for next button
+            self.current_col += 1
+
+    def init_turn(self):
+        uno_client = self.controller.uno_client
+        player = uno_client.player
+        turn = uno_client.turn
+        if player['player_name'] == turn:
+            self.turn_label['text'] = 'Your turn'
+            uno_client.your_turn = True
+        else:
+            self.turn_label['text'] = 'Wait for your turn'
+
+    def change_cardstate(self):
+        state = 'normal' if self.controller.uno_client.your_turn else 'disabled'
+        for button in self.buttons:
+            button['state'] = state
+
+    def done_wait(self):
+        self.controller.uno_client.wait_turndata()
+        self.turn_label['text'] = 'Your turn'
+        self.controller.uno_client.your_turn = True
+        self.change_cardstate()
+        self.show_currentcard()
+        self.add_draw()
+
+    def receive_messages(self):
+        chat_client = self.controller.chat_client
+        while True:
+            messages = chat_client.receive_messages()
+            self.chat_area.delete('1.0', 'end')
+            for message in messages:
+                self.chat_area.insert('end', message)
+
+    def send_message(self):
+        self.controller.chat_client.send_message(self.sendchat_entry.get())
+        self.sendchat_entry.delete('0', 'end')
 
 
 client_app = MainApp()

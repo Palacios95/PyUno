@@ -29,10 +29,11 @@ class UnoClient:
         starting_dict = json.loads(self.client_sock.recv(RECV_BUFFER).decode())
         self.turn = starting_dict['turn']
         self.player['hand'] = starting_dict['hand']
+        self.current_card = starting_dict['current_card']
 
     def send_card(self, card):
         self.player['hand'].remove(card)
-        self.client_sock.send(json.dumps(card).encode())
+        self.client_sock.send(json.dumps({'card': card, 'hand': self.player['hand']}).encode())
 
     def wait_turndata(self):
         turndata = json.loads(self.client_sock.recv(RECV_BUFFER).decode())
@@ -48,4 +49,9 @@ class UnoClient:
 
     def receive_card(self):
         return json.loads(self.client_sock.recv(RECV_BUFFER).decode())
+
+    def change_cardcolor(self, wild_card, color):
+        for card in self.player['hand']:
+            if card['type'] == wild_card['type']:
+                card['color'] = color
 

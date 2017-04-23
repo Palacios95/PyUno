@@ -4,7 +4,7 @@ from src.UnoClient import UnoClient
 from src.ChatClient import ChatClient
 from tkinter.scrolledtext import ScrolledText
 import threading
-
+import tkinter.messagebox as messagebox
 
 # Main part of the app. Handles transition from the connection window to the game window and stores the player
 # dictionary as well as the socket to connect to the server.
@@ -126,13 +126,14 @@ class GameWindow(tk.Frame):
         self.buttons = []
         # iterator to determine which column to place the button in within the grid
         self.current_col = 0
+        self.chosen_wildcard = {}
 
         self.grid_rowconfigure(1)
         self.grid_columnconfigure(1, weight=1)
 
         title_label = ttk.Label(self, text="PyUno")
         self.turn_label = ttk.Label(self, text="turn")
-        self.currentcard_label = ttk.Label(self, text='')
+        self.currentcard_label = ttk.Label(self, text='Current card')
         self.currentcard_frame = ttk.Frame(self)
         card_label = ttk.Label(self, text="Cards in your hand")
         chat_label = ttk.Label(self, text="Chat")
@@ -148,10 +149,16 @@ class GameWindow(tk.Frame):
         card_label.grid(row=4, column=1)
         # Button array needs its own frame
         self.button_frame = ttk.Frame(self)
+        self.wildcolor_frame = ttk.Frame(self)
+        self.skipturn_button = ttk.Button(self, text='Skip your turn', command=self.skip_turn)
+        self.buttons.append(self.skipturn_button)
         self.button_frame.grid(row=5, column=1)
-        chat_label.grid(row=6, column=1)
-        self.chat_area.grid(row=7, column=1)
-        chat_frame.grid(row=8, column=1)
+        self.skipturn_button.grid(row=6, column=1)
+        chat_label.grid(row=8, column=1)
+        self.chat_area.grid(row=9, column=1)
+        chat_frame.grid(row=19, column=1)
+
+        #Chat stuff is in its own frame
         sendchat_label.grid(row=0, column=0)
         self.sendchat_entry.grid(row=0, column=1)
         sendchat_button.grid(row=0, column=2)
@@ -159,7 +166,10 @@ class GameWindow(tk.Frame):
         messagereceive_thread = threading.Thread(target=self.receive_messages)
         messagereceive_thread.start()
 
+        self.show_currentcard()
+
         self.generate_cardbuttons()
+        self.generate_wildcolorbuttons()
 
         self.init_turn()
         self.change_cardstate()
@@ -176,7 +186,7 @@ class GameWindow(tk.Frame):
         # Iterate through cards in hand and create a new button.
         for card in hand:
             # Initialize Button control
-            card_button = ttk.Button(self.button_frame, text=card['type'], style="%s.TButton" % card['color'], width=5,
+            card_button = ttk.Button(self.button_frame, text=card['type'], style="%s.TButton" % card['color'], width=10,
                                     command=lambda current_card=card: self.button_action(current_card))
             # Append button control to array
             self.buttons.append(card_button)
@@ -188,12 +198,35 @@ class GameWindow(tk.Frame):
     # Determine which action to send to the server depending on which button is clicked.
     def button_action(self, card):
         uno_client = self.controller.uno_client
-        uno_client.send_card(card)
 
-        button = self.get_button(card)
-        button.destroy()
-        self.buttons.remove(button)
+        if card['type'] == 'Wild' or card['type'] == 'Wild 4':
+            self.chosen_wildcard = card
+            self.wildcolor_frame.grid(row=7, column=1)
 
+        else:
+            if card['type'] == uno_client.current_card['type'] or card['color'] == uno_client.current_card['color']:
+
+                uno_client.send_card(card)
+                button = self.get_button(card)
+                button.destroy()
+                self.buttons.remove(button)
+
+                self.next_turn()
+            else:
+                messagebox.showinfo("Incorrect match", "Incorrect card match! Please match by card type or color. "
+                                    + "If you can't, skip your turn")
+
+
+    def skip_turn(self):
+        uno_client = self.controller.uno_client
+        skipturn_card = {'type': 'skip turn'}
+        uno_client.player['hand'].append(skipturn_card)
+        uno_client.send_card(skipturn_card)
+
+        self.next_turn()
+
+    def next_turn(self):
+        uno_client = self.controller.uno_client
         self.turn_label['text'] = 'Wait for your turn'
         uno_client.your_turn = False
         self.change_cardstate()
@@ -214,18 +247,16 @@ class GameWindow(tk.Frame):
                 return button
 
     def show_currentcard(self):
-        self.currentcard_label['text'] = 'Current card'
         current_card = self.controller.uno_client.current_card
         card_button = ttk.Button(self.currentcard_frame, text=current_card['type'],
-                                 style="%s.TButton" % current_card['color'], width=5)
+                                 style="%s.TButton" % current_card['color'], width=10)
         card_button.grid(row=0, column=0, sticky='ew')
 
     def add_draw(self):
         uno_client = self.controller.uno_client
         cards = uno_client.cards_drawn
-        print(self.current_col)
         for card in cards:
-            card_button = ttk.Button(self.button_frame, text=card['type'], style="%s.TButton" % card['color'], width=5,
+            card_button = ttk.Button(self.button_frame, text=card['type'], style="%s.TButton" % card['color'], width=10,
                                      command=lambda current_card=card: self.button_action(current_card))
             # Append button control to array
             self.buttons.append(card_button)
@@ -268,6 +299,37 @@ class GameWindow(tk.Frame):
     def send_message(self):
         self.controller.chat_client.send_message(self.sendchat_entry.get())
         self.sendchat_entry.delete('0', 'end')
+
+    def generate_wildcolorbuttons(self):
+        color_label = ttk.Label(self.wildcolor_frame, text='Choose wild card color:')
+        color_label.grid(row=0, column=0)
+        colors = ['yellow', 'green', 'red', 'blue']
+        current_col = 1
+        for color in colors:
+            color_button = ttk.Button(self.wildcolor_frame, text=color, style="%s.TButton" % color, width=10,
+                                      command=lambda wild_color=color: self.determine_wildcolor(wild_color))
+            # Add button to grid dynamically
+            color_button.grid(row=0, column=current_col)
+            # Increment for next button
+            current_col += 1
+        print(self.wildcolor_frame)
+
+    def determine_wildcolor(self, color):
+        uno_client = self.controller.uno_client
+        uno_client.change_cardcolor(self.chosen_wildcard, color)
+        self.change_wildcard_buttoncolor(self.chosen_wildcard)
+        self.wildcolor_frame.grid_remove()
+
+        uno_client.send_card(self.chosen_wildcard)
+        button = self.get_button(self.chosen_wildcard)
+        button.destroy()
+        self.buttons.remove(button)
+        self.next_turn()
+
+    def change_wildcard_buttoncolor(self, wild_card):
+        for button in self.buttons:
+            if button['text'] == wild_card['type']:
+                button['style'] = '%s.TButton' % wild_card['color']
 
 
 client_app = MainApp()

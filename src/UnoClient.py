@@ -37,11 +37,13 @@ class UnoClient:
 
     def wait_turndata(self):
         turndata = json.loads(self.client_sock.recv(RECV_BUFFER).decode())
-        self.current_card = turndata['current_card']
         self.win = turndata['win']
-        self.cards_drawn = turndata['draw_cards']
-        self.draw_cards(self.cards_drawn)
-        print(turndata)
+        if not self.win:
+            self.current_card = turndata['current_card']
+            self.cards_drawn = turndata['draw_cards']
+            self.draw_cards(self.cards_drawn)
+
+
 
     def draw_cards(self, cards):
         for card in cards:

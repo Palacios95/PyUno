@@ -17,8 +17,8 @@ class ChatClient:
         self.client_sock.connect((hostname, port_num))
         print("Connected to chat!")
 
-    def send_message(self, message):
-        self.client_sock.send(json.dumps({'message': message}).encode())
+    def send_message(self, player_name, message):
+        self.client_sock.send(json.dumps({'player_name': player_name, 'message': message}).encode())
 
     def receive_messages(self):
         return json.loads(self.client_sock.recv(RECV_BUFFER).decode())['messages']

@@ -22,10 +22,10 @@ class ChatServer:
         self.server_sock.bind(('', port_num))
         self.server_sock.listen(15)
 
-    def accept_chat(self, chat_sock, player_index, players):
+    def accept_chat(self, chat_sock):
         while True:
             message = json.loads(chat_sock.recv(RECV_BUFFER).decode())
-            self.messages.append('%s: %s\n' % (players[player_index]['player_name'], message['message']))
+            self.messages.append('%s: %s\n' % (message['player_name'], message['message']))
             for sock in self.chat_socks:
                 sock.send(json.dumps({'messages': self.messages}).encode())
 
@@ -37,7 +37,7 @@ class ChatServer:
             count += 1
         count = 0
         while count < numplayers:
-            chat_thread = threading.Thread(target=self.accept_chat, args=(self.chat_socks[count], count, players))
+            chat_thread = threading.Thread(target=self.accept_chat, args=(self.chat_socks[count],))
             chat_thread.start()
             count += 1
 

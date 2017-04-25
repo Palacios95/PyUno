@@ -2,6 +2,7 @@ import tkinter as tk
 import tkinter.ttk as ttk
 from src.UnoClient import UnoClient
 from src.ChatClient import ChatClient
+from src.PingClient import PingClient
 from tkinter.scrolledtext import ScrolledText
 import threading
 import tkinter.messagebox as messagebox
@@ -17,6 +18,7 @@ class MainApp(tk.Tk):
 
         self.uno_client = UnoClient()
         self.chat_client = ChatClient()
+        self.ping_client = PingClient()
         self.hostname = ''
         self.port_num = 0
         self.chatport_num = 0
@@ -28,7 +30,7 @@ class MainApp(tk.Tk):
         container.grid_rowconfigure(0, weight=1)
         container.grid_columnconfigure(0, weight=1)
 
-        self.geometry("250x120")
+        self.geometry("270x140")
 
         # Configure button styling
         style = ttk.Style()
@@ -71,6 +73,8 @@ class ConnectWindow(tk.Frame):
         self.port_entry = ttk.Entry(self)
         self.chatport_label = ttk.Label(self, text="Chat Port Number: ")
         self.chatport_entry = ttk.Entry(self)
+        self.pingport_label = ttk.Label(self, text="Ping Port Number: ")
+        self.pingport_entry = ttk.Entry(self)
         self.connect_button = ttk.Button(self, text="Connect", command=self.connect)
         # Adding all controls to the grid of the window.
         name_label.grid(row=0, sticky='e')
@@ -81,7 +85,9 @@ class ConnectWindow(tk.Frame):
         self.port_entry.grid(row=2, column=1)
         self.chatport_label.grid(row=3, column=0)
         self.chatport_entry.grid(row=3, column=1)
-        self.connect_button.grid(row=4, column=1)
+        self.pingport_label.grid(row=4, column=0)
+        self.pingport_entry.grid(row=4, column=1)
+        self.connect_button.grid(row=5, column=1)
 
         self.insert_defaults()
 
@@ -89,6 +95,7 @@ class ConnectWindow(tk.Frame):
     def connect(self):
         uno_client = self.controller.uno_client
         chat_client = self.controller.chat_client
+        ping_client = self.controller.ping_client
         self.connect_button['text'] = 'Waiting for other players...'
         self.update()
         self.controller.hostname = self.host_entry.get()
@@ -100,6 +107,8 @@ class ConnectWindow(tk.Frame):
 
         self.controller.chatport_num = int(self.chatport_entry.get())
         chat_client.start_client(self.controller.hostname, self.controller.chatport_num)
+
+        ping_client.start_client(self.controller.hostname, int(self.pingport_entry.get()))
 
         frame = GameWindow(parent=self.parent, controller=self.controller)
         self.controller.frames[GameWindow] = frame
@@ -115,6 +124,7 @@ class ConnectWindow(tk.Frame):
         self.host_entry.insert('end', 'localhost')
         self.port_entry.insert('end', 2121)
         self.chatport_entry.insert('end', 2122)
+        self.pingport_entry.insert('end', 2123)
 
 
 class GameWindow(tk.Frame):
@@ -142,6 +152,9 @@ class GameWindow(tk.Frame):
         sendchat_label = ttk.Label(chat_frame, text='Send Message:')
         self.sendchat_entry = ttk.Entry(chat_frame, text='', width=50)
         sendchat_button = ttk.Button(chat_frame, text='Send message', command=self.send_message)
+        ping_button = ttk.Button(self, text='Ping server',
+                                 command=lambda player_name=self.controller.uno_client.player['player_name']:
+                                 self.controller.ping_client.send_ping(player_name))
         title_label.grid(row=0, column=1)
         self.turn_label.grid(row=1, column=1)
         self.currentcard_label.grid(row=2, column=1)
@@ -156,7 +169,9 @@ class GameWindow(tk.Frame):
         self.skipturn_button.grid(row=6, column=1)
         chat_label.grid(row=8, column=1)
         self.chat_area.grid(row=9, column=1)
-        chat_frame.grid(row=19, column=1)
+        chat_frame.grid(row=10, column=1)
+        ping_button.grid(row=11, column=1)
+
 
         #Chat stuff is in its own frame
         sendchat_label.grid(row=0, column=0)
@@ -234,12 +249,14 @@ class GameWindow(tk.Frame):
         self.update()
 
         uno_client.wait_turndata()
-
-        self.show_currentcard()
-        self.add_draw()
-        self.turn_label['text'] = 'Your turn'
-        uno_client.your_turn = True
-        self.change_cardstate()
+        if not uno_client.win:
+            self.show_currentcard()
+            self.add_draw()
+            self.turn_label['text'] = 'Your turn'
+            uno_client.your_turn = True
+            self.change_cardstate()
+        else:
+            messagebox.showinfo("Game ended", "%s wins!" % uno_client.win)
 
     def get_button(self, card):
         for button in self.buttons:
@@ -297,7 +314,8 @@ class GameWindow(tk.Frame):
                 self.chat_area.insert('end', message)
 
     def send_message(self):
-        self.controller.chat_client.send_message(self.sendchat_entry.get())
+        player_name = self.controller.uno_client.player['player_name']
+        self.controller.chat_client.send_message(player_name, self.sendchat_entry.get())
         self.sendchat_entry.delete('0', 'end')
 
     def generate_wildcolorbuttons(self):

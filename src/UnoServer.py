@@ -36,7 +36,10 @@ class UnoServer:
         self.start_game()
 
     def start_game(self):
-        self.card_pile.append(self.deck.pop())
+        first_card = self.deck.pop()
+        if first_card['type'] == 'Wild' or first_card['type'] == 'Wild 4':
+            first_card['color'] = 'blue'
+        self.card_pile.append(first_card)
         for player in self.players:
             hand = []
             for i in range(0, 7):
@@ -54,10 +57,14 @@ class UnoServer:
         game_thread.start()
 
     def run_game(self):
-        while True:
+        winner = False
+        winning_player = {}
+        while not winner:
             self.receive_card()
+            (winner, winning_player) = self.check_winner()
             (draw_cards, self.player_index) = self.process_card()
             self.send_turndata(draw_cards)
+        self.send_winner(winning_player)
 
     def receive_card(self):
         player = self.players[self.player_index]
@@ -104,18 +111,43 @@ class UnoServer:
     def send_turndata(self, draw_cards):
         player = self.players[self.player_index]
         current_card = self.card_pile[len(self.card_pile) - 1]
-        win = ''
-        player['socket'].send(json.dumps({'current_card': current_card, 'win': win, 'draw_cards': draw_cards}).encode())
+        player['socket'].send(json.dumps({'current_card': current_card, 'win': '', 'draw_cards': draw_cards}).encode())
 
-    def player_thread(self, player):
-        while True:
-            self.receive_card(player)
+    def check_winner(self):
+        winner = False
+        winning_player = {}
 
-    def start_playerthreads(self):
+        #List is empty
+        if not self.deck:
+            winner = True
+            tentative_winner = {'player': '', 'points': 10000}
+            for player in self.players:
+                points = 0
+                for card in player['hand']:
+                    type = card['type']
+                    if type == 'Draw two' or type == 'Reverse' or type == 'Skip':
+                        points += 20
+                    elif type == 'Wild' or type == 'Wild 4':
+                        points += 50
+                    else:
+                        points += int(type)
+                if tentative_winner['points'] > points:
+                    tentative_winner = {'player': player['player_name'], 'points': points}
+
         for player in self.players:
-            p_thread = threading.Thread(target=self.player_thread, args=(player,))
-            p_thread.start()
-            self.thread_list.append(p_thread)
+            if len(player['hand']) == 1:
+                winner = True
+                winning_player = player['player_name']
+
+        return winner, winning_player
+
+    def send_winner(self, winning_player):
+        for player in self.players:
+            player['socket'].send(json.dumps({'win': winning_player}).encode())
+
+
+
+
 
 
 

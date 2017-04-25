@@ -1,7 +1,9 @@
 import tkinter as tk
 import tkinter.ttk as ttk
+from tkinter.scrolledtext import ScrolledText
 from src.UnoServer import UnoServer
 from src.ChatServer import ChatServer
+from src.PingServer import PingServer
 import threading
 RECV_BUFFER = 1024
 
@@ -17,6 +19,7 @@ class MainApp(tk.Tk):
 
         self.uno_server = UnoServer()
         self.chat_server = ChatServer()
+        self.ping_server = PingServer()
 
         self.wm_title("PyUno Server")
         # Main frame and config
@@ -55,17 +58,21 @@ class ServerWindow(tk.Frame):
         self.port_entry = ttk.Entry(self)
         chatport_label = ttk.Label(self, text="Chat Port Number: ")
         self.chatport_entry = ttk.Entry(self)
+        pingport_label = ttk.Label(self, text="Ping Port Number: ")
+        self.pingport_entry = ttk.Entry(self)
         playerno_label = ttk.Label(self, text="Number of players: ")
         self.playerno_entry = ttk.Entry(self)
         # Adding relevant controls to grid.
         port_label.grid(row=0, sticky='e')
         self.port_entry.grid(row=0, column=1)
         self.chatport_entry.grid(row=1, column=1)
+        self.pingport_entry.grid(row=2, column=1)
         chatport_label.grid(row=1, sticky='e')
-        playerno_label.grid(row=2, sticky='e')
-        self.playerno_entry.grid(row=2, column=1)
+        pingport_label.grid(row=2, sticky='e')
+        playerno_label.grid(row=3, sticky='e')
+        self.playerno_entry.grid(row=3, column=1)
         start_button = ttk.Button(self, text="Start server", command=self.start)
-        start_button.grid(row=3, column=1)
+        start_button.grid(row=4, column=1)
 
         self.insert_defaults()
 
@@ -73,8 +80,11 @@ class ServerWindow(tk.Frame):
     def start(self):
         uno_server = self.controller.uno_server
         chat_server = self.controller.chat_server
+        ping_server = self.controller.ping_server
+        server_port = int(self.port_entry.get())
 
-        uno_server.create_socket(int(self.port_entry.get()))
+        uno_server.create_socket(server_port)
+        ping_server.create_socket(int(self.pingport_entry.get()))
         chat_server.create_socket(int(self.chatport_entry.get()))
 
         chat_thread = threading.Thread(target=chat_server.accept_chats,
@@ -95,6 +105,7 @@ class ServerWindow(tk.Frame):
         self.port_entry.insert('end', 2121)
         self.playerno_entry.insert('end', 1)
         self.chatport_entry.insert('end', 2122)
+        self.pingport_entry.insert('end', 2123)
 
 
 class PingWindow(tk.Frame):
@@ -102,11 +113,26 @@ class PingWindow(tk.Frame):
         ttk.Frame.__init__(self, parent)
         self.controller = controller
         uno_server = self.controller.uno_server
+        self.ping_server = self.controller.ping_server
 
-        label = ttk.Label(self, text="Ping players")
+        self.grid_rowconfigure(1)
+        self.grid_columnconfigure(1, weight=1)
+
+        label = ttk.Label(self, text="Pings from players")
+        self.chat_area = ScrolledText(self, height=10)
         label.grid(row=0, column=1)
+        self.chat_area.grid(row=1, column=1)
 
         uno_server.start_gamethread()
+        ping_thread = threading.Thread(target=self.ping_thread)
+        ping_thread.start()
+
+    def ping_thread(self):
+        while True:
+            message = self.ping_server.accept_pings()
+            self.chat_area.insert('end',message)
+
+
 
 server_app = MainApp()
 server_app.mainloop()
